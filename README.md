@@ -1,195 +1,363 @@
+<div align="center">
+
+<img src="Frontend/public/logo.svg" alt="RLNA logo" width="100" />
+
 # RLNA — Research Literature & Novelty Assistant
 
-An AI-assisted research workspace. Upload a set of papers, search them in plain
-English, ask questions that are answered from the retrieved passages, compare
-methodologies, find research gaps, and check an idea against what the corpus
-already contains.
+**A research workspace that answers questions from your own papers.**
 
-The defining constraint is honesty about evidence. Every AI output is built from
-retrieved chunks, cites the papers it came from, reports its own confidence, and
-refuses when the evidence is too thin to answer.
+Upload research PDFs, search them in plain English, ask questions, compare papers,
+find research gaps, and check whether an idea is already covered by the literature
+you have collected.
 
-```
-React (Vite)  ->  Spring Boot  ->  Neon PostgreSQL + pgvector
-                       |            Backblaze B2 (S3-compatible)
-                       +--------->  FastAPI  ->  Gemini / Groq / OpenRouter
-```
+[![CI](https://github.com/13SunnySingh12/RLNA-Research-Literature-Novelty-Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/13SunnySingh12/RLNA-Research-Literature-Novelty-Assistant/actions/workflows/ci.yml)
+![Java](https://img.shields.io/badge/Java-21-b07219)
+![Python](https://img.shields.io/badge/Python-3.12-3572A5)
+![React](https://img.shields.io/badge/React-19-61dafb)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-336791)
+
+<img src="Frontend/public/product-library.png" alt="The paper library view" width="800" />
+
+</div>
 
 ---
 
 ## What it does
 
-| Feature | Behaviour |
+Every uploaded paper is split into sections, chunked, and converted into vectors
+stored in PostgreSQL. When you ask a question, the system finds the most relevant
+passages from **your own** papers and answers only from those passages.
+
+The core rule is **honesty about evidence**: every answer cites the passages it came
+from, reports its confidence, and refuses to answer when the evidence is too thin. A
+claim that cites a passage which was not actually retrieved is dropped before you
+ever see it.
+
+---
+
+## Key features
+
+| Feature | What it does |
 |---|---|
-| **Paper indexing** | PDF to text, section detection, section-aware chunking, local embeddings, stored in pgvector. Runs on the server; closing the tab does not affect it. |
-| **Semantic search** | Query embedding against the user's own chunks, filtered by owner inside the same SQL statement as the ranking. |
-| **Section-weighted retrieval** | Every chunk carries its section, so gap analysis boosts Limitations and Future Work while comparison boosts Methodology and Results. |
-| **Grounded Q&A** | Answers cite the chunk behind each claim. A claim citing a chunk that was not retrieved is dropped before rendering. |
-| **Paper comparison** | Two or three papers across nine fixed dimensions. A dimension a paper does not cover is `Not reported`, never inferred. |
-| **Research gaps** | Derived from limitations and future work the authors themselves wrote. A gap with no citable evidence is discarded, not shown. |
-| **Novelty assessment** | Overlap, differences and potentially-novel aspects against the retrieved corpus. No numeric score, and the limitations banner is always visible. |
-| **Literature review draft** | Themes, methods, agreements, contradictions. Only papers that contributed evidence are cited. |
-| **Two-tier model routing** | Cheap tier for extraction, strong tier for reasoning, automatic failover across three providers with per-provider cooldown. |
-| **Result caching** | SHA-256 of task, model, normalized query and evidence ids. An identical request makes no model call at all. |
-| **Duplicate detection** | Exact content hash blocks a re-upload; trigram title match warns at upload; embedding similarity flags a match after indexing. |
-| **Export** | Markdown, PDF and BibTeX, with confidence and limitations carried into the exported document. |
+| **Paper indexing** | Extracts text from a PDF, detects sections, chunks it, and generates embeddings. Runs in the background, so closing the tab does not stop it. |
+| **Semantic search** | Search by meaning, not keywords. Results are always limited to your own library. |
+| **Grounded Q&A** | Ask a question about one paper or a whole project. Each claim links to the passage behind it. |
+| **Paper comparison** | Compare two or three papers across nine fixed dimensions. Anything the papers do not cover is marked `Not reported`. |
+| **Research gaps** | Finds gaps from the limitations and future work the authors themselves wrote. |
+| **Novelty check** | Describe an idea and see the overlap, differences, and potentially novel parts against your corpus. |
+| **Literature review draft** | Themes, methods, agreements, and contradictions across a project's papers. |
+| **Duplicate detection** | Blocks identical re-uploads, warns on similar titles, and flags near-duplicates after indexing. |
+| **Academic lookup** | Search an open academic catalogue and import a paper's details, adding the PDF later. |
+| **Export** | Save any analysis as Markdown, PDF, or BibTeX. |
+| **Smart model routing** | A cheap model tier for simple extraction and a strong tier for reasoning, with automatic failover across three providers. |
+| **Result caching** | An identical request reuses the stored result instead of calling a model again. |
 
 ---
 
-## Repository layout
+## Tech stack
 
-```
-Backend/          Spring Boot 3.4 (Java 21) - the public REST API
-AI/               FastAPI (Python 3.12)     - PDF, embeddings, retrieval, models
-Frontend/         React 19 + Vite + Tailwind 4
-Database/         Flyway migrations (the single canonical copy of the schema)
-Infrastructure/   Docker Compose, nginx config
-Docs/             Architecture, API reference, implementation notes
-venv/             Python virtual environment (git-ignored)
-```
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19, Vite, Tailwind CSS 4, React Router, Axios, Recharts |
+| **Backend API** | Spring Boot 3.4 (Java 21), Spring Security, Spring Data JPA |
+| **AI service** | FastAPI (Python 3.12), PyMuPDF, Sentence-Transformers, PyTorch |
+| **Database** | PostgreSQL with the pgvector extension, Flyway migrations |
+| **File storage** | Backblaze B2 (S3-compatible API); MinIO for local development |
+| **Authentication** | Neon Auth — email and password, Google, GitHub |
+| **Embeddings** | `all-MiniLM-L6-v2`, 384 dimensions, running locally on CPU |
+| **Language models** | Google Gemini, Groq, OpenRouter |
+| **Infrastructure** | Docker Compose, nginx, GitHub Actions |
 
-Migrations live only in `Database/migrations`. The backend build copies them onto
-its classpath, so there is one copy of the schema and no drift.
+Embeddings run locally on the CPU, which is what keeps semantic search free to use.
 
 ---
 
-## Running it locally
+## Architecture
+
+Three services, each with a clear job.
+
+```mermaid
+flowchart LR
+    FE["Frontend<br/>React + Vite"]
+    BE["Backend API<br/>Spring Boot"]
+    PY["AI service<br/>FastAPI"]
+    DB[("PostgreSQL<br/>+ pgvector")]
+    ST[("Backblaze B2<br/>PDF files")]
+    AUTH["Neon Auth"]
+    LLM["Gemini · Groq<br/>OpenRouter"]
+
+    FE -->|"requests with a token"| BE
+    FE -.->|"sign in"| AUTH
+    BE -.->|"verify the token"| AUTH
+    BE --> DB
+    BE --> ST
+    BE -->|"internal calls"| PY
+    PY --> DB
+    PY --> ST
+    PY --> LLM
+```
+
+- **Backend API** handles everything security-related: verifying the login token,
+  checking that a paper belongs to you, validating uploads, and storing files.
+- **AI service** handles the heavy processing: reading PDFs, chunking, embeddings,
+  retrieval, and talking to the language models. It never checks permissions itself,
+  which is why it is not publicly reachable.
+- **PostgreSQL** stores papers, sections, chunks, vectors, and saved analyses.
+  **Backblaze B2** stores the PDF files themselves.
+
+### How a question gets answered
+
+```mermaid
+flowchart TD
+    A["Upload a PDF"] --> B["Validate and store the file"]
+    B --> C["Background job starts"]
+    C --> D["Extract text and detect sections"]
+    D --> E["Split into chunks"]
+    E --> F["Generate embeddings"]
+    F --> G["Save chunks and vectors"]
+
+    G --> H["Ask a question"]
+    H --> I["Find the most relevant chunks<br/>from your own papers"]
+    I --> J{"Enough relevant<br/>evidence?"}
+    J -->|No| K["Say so instead of guessing"]
+    J -->|Yes| L{"Answered this<br/>before?"}
+    L -->|Yes| M["Reuse the saved result"]
+    L -->|No| N["Send the passages to a model"]
+    N --> O["Check the answer's format<br/>and its citations"]
+    O --> P["Show the answer with sources"]
+```
+
+Uploaded PDFs are treated as untrusted input. Passages are passed to the model as
+clearly marked evidence, answers must match a strict format, and any claim citing a
+passage that was not retrieved is removed before display.
+
+---
+
+## Project structure
+
+```
+.
+├── Backend/                 Spring Boot API — auth, papers, projects, uploads, cache
+├── AI/                      FastAPI service — PDF parsing, embeddings, retrieval, prompts
+├── Frontend/                React app — all pages and UI
+├── Database/migrations/     Flyway migrations (the single source of truth for the schema)
+├── Infrastructure/docker/   Docker Compose and nginx configuration
+├── Docs/                    Architecture, API reference, and design notes
+└── .github/workflows/       CI pipeline
+```
+
+Detailed documentation lives in [`Docs/`](Docs) — including the full
+[API reference](Docs/API/api.md) and
+[architecture notes](Docs/Architecture/architecture.md).
+
+---
+
+## Setup and installation
 
 ### Prerequisites
 
-Java 21, Maven 3.9, Node 20+, Python 3.11+, Docker.
+Java 21 · Maven 3.9+ · Node.js 20+ · Python 3.11+ · Docker
 
-### 1. Configure
+### Accounts you will need
+
+| Service | Used for |
+|---|---|
+| **PostgreSQL host** (e.g. Neon) | The database |
+| **Neon Auth** | Login. Email and password work out of the box; Google and GitHub need your own OAuth app credentials. |
+| **Backblaze B2** | Storing uploaded PDFs. Create a **private** bucket and a key scoped to it. |
+| **A model provider** | Google AI Studio, Groq, or OpenRouter — at least one. Without a key, upload and search still work, and analysis reports that AI is unavailable. |
+
+### Get the code
+
+```bash
+git clone https://github.com/13SunnySingh12/RLNA-Research-Literature-Novelty-Assistant.git
+```
 
 ```bash
 cp .env.example .env
 ```
 
-Fill in `DATABASE_URL`, the `NEON_AUTH_*` values, and at least one LLM provider
-key. See [Manual setup](#manual-setup) below for where each comes from.
+Then fill in your own values. Both backends refuse to start if a required variable is
+missing, rather than failing later during an upload.
 
-### 2. Storage
+---
 
-Backblaze B2 in production, reached through its S3-compatible API. For local
-development MinIO speaks the same API, so the storage code path is identical and
-no cloud credentials are needed. Set `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`
-in `.env` first — any values will do, they never leave your machine — then:
+## Environment variables
 
-```bash
-docker compose --env-file .env -f Infrastructure/docker/docker-compose.yml up -d minio minio-init
-```
+All configuration comes from environment variables. `.env.example` lists every name.
+**Never commit a filled-in `.env`** — it is git-ignored for this reason.
 
-### 3. Start the services
+### Required
 
-```bash
-python -m venv venv && ./venv/Scripts/python.exe -m pip install -r AI/requirements.txt
-```
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Database connection string |
+| `NEON_AUTH_BASE_URL` | Address of the authentication server |
+| `NEON_AUTH_JWKS_URL` | Where the backend fetches keys to verify login tokens |
+| `NEON_AUTH_ISSUER` | Expected token issuer (the server origin, without the auth path) |
+| `ALLOWED_CALLER_TOKEN` | Shared secret protecting the AI service (at least 24 characters) |
+| `FASTAPI_INTERNAL_TOKEN` | The same secret, as sent by the backend |
+| `FASTAPI_BASE_URL` | Where the backend reaches the AI service |
+| `FRONTEND_ORIGIN` | Browser origin allowed by CORS |
+| `VITE_API_BASE_URL` | Backend address used by the browser |
+| `VITE_NEON_AUTH_BASE_URL` | Auth server address used by the browser |
 
-```bash
-cd AI && ../venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
-```
+### File storage
 
-```bash
-cd Backend && mvn spring-boot:run
-```
+| Variable | Purpose |
+|---|---|
+| `B2_KEY_ID`, `B2_APPLICATION_KEY` | Storage credentials |
+| `B2_BUCKET_NAME` | Bucket for uploaded PDFs; must be private |
+| `B2_ENDPOINT` | Storage endpoint host |
+| `B2_REGION` | Must match the endpoint host, because it is part of the request signature |
+| `B2_SIGNED_URL_TTL_SECONDS` | How long a download link stays valid |
+| `B2_FORCE_PATH_STYLE` | Needed by the local storage stand-in |
 
-```bash
-cd Frontend && npm install && npm run dev
-```
+### Models
 
-The frontend runs on <http://localhost:5173>, the API on `:8080`, the AI service
-on `:8000`. Flyway applies the schema on the backend's first start.
+| Variable | Purpose |
+|---|---|
+| `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` | Provider keys; at least one is needed for analysis |
+| `GEMINI_MODEL`, `GEMINI_FAST_MODEL` | Strong and fast model names |
+| `GROQ_MODEL`, `GROQ_FAST_MODEL` | Strong and fast model names |
+| `OPENROUTER_MODEL` | Fallback model name |
+| `LLM_STRONG_ORDER`, `LLM_FAST_ORDER` | Provider order per tier; leave empty for the default |
+| `AI_REQUEST_TIMEOUT_SECONDS`, `AI_MAX_RETRIES`, `AI_PROVIDER_COOLDOWN_SECONDS` | Timeout, retries, and pause after a rate limit |
+| `AI_CACHE_ENABLED` | Whether repeat requests reuse saved results |
+| `DUAL_MODEL_VERIFICATION` | Optional second-model check; off by default |
 
-### Everything in Docker
+### Search and indexing
+
+| Variable | Purpose |
+|---|---|
+| `EMBEDDING_MODEL`, `EMBEDDING_DIMENSION` | Embedding model and its vector size |
+| `CHUNK_SIZE_TOKENS`, `CHUNK_OVERLAP_TOKENS` | Chunk size and overlap |
+| `RETRIEVAL_TOP_K` | How many passages to retrieve |
+| `RETRIEVAL_MIN_SCORE` | Minimum relevance before a request is refused |
+| `SECTION_BOOST_FACTOR` | Extra weight for sections relevant to the task |
+| `MAX_CONTEXT_CHARACTERS` | How much evidence fits in one prompt |
+
+### Service settings
+
+| Variable | Purpose |
+|---|---|
+| `SERVER_PORT`, `PORT` | Ports for the backend and the AI service |
+| `SPRING_PROFILES_ACTIVE`, `LOG_LEVEL` | Active profile and log detail |
+| `MAX_UPLOAD_SIZE_MB` | Largest allowed file |
+| `ASYNC_POOL_SIZE` | Number of background indexing workers |
+| `ACADEMIC_API_BASE_URL`, `ACADEMIC_API_MAILTO`, `ACADEMIC_API_RATE_LIMIT_PER_MINUTE` | Academic catalogue settings |
+
+### Local Docker only
+
+| Variable | Purpose |
+|---|---|
+| `POSTGRES_PASSWORD` | Password for the local database container |
+| `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Local storage credentials; any values work, they stay on your machine |
+
+---
+
+## Running the project
+
+### Option A — everything in Docker
 
 ```bash
 docker compose --env-file .env -f Infrastructure/docker/docker-compose.yml up --build
 ```
 
-This also starts Postgres with pgvector, so the stack runs without Neon. It needs
-`POSTGRES_PASSWORD` alongside the two MinIO values; Compose stops with a message
-naming any that are missing rather than starting a database with a blank one.
+This starts the database, local file storage, and all three services together.
 
-> **Note for Windows users:** if the repository path contains spaces, npm's
-> `.bin` shims can fail to resolve. The `Frontend/package.json` scripts invoke
-> the tool entry points through `node` directly to avoid this.
+### Option B — run services yourself
 
----
+**1. Start local file storage** (MinIO uses the same API as Backblaze B2, so no cloud
+credentials are needed):
 
-## Tests
+```bash
+docker compose --env-file .env -f Infrastructure/docker/docker-compose.yml up -d minio minio-init
+```
+
+**2. Install Python dependencies:**
+
+```bash
+python -m venv venv
+```
+
+```bash
+./venv/bin/pip install -r AI/requirements.txt
+```
+
+> On Windows, use `venv/Scripts/python.exe` instead of `venv/bin/python`.
+
+**3. Start the AI service:**
+
+```bash
+cd AI && ../venv/bin/python -m uvicorn app.main:app --port 8000
+```
+
+**4. Start the backend** (the database schema is created automatically on first run):
+
+```bash
+cd Backend && mvn spring-boot:run
+```
+
+**5. Start the frontend:**
+
+```bash
+cd Frontend && npm install && npm run dev
+```
+
+| Service | Address |
+|---|---|
+| Frontend | `http://localhost:5173` |
+| Backend API | `http://localhost:8080` |
+| AI service | `http://localhost:8000` |
+
+### Running the tests
 
 ```bash
 cd Backend && mvn test
 ```
 
-The Python suite needs the test-only dependencies. They are kept out of the
-runtime file so the deployed image does not ship a test runner, and the dev
-file pulls the runtime one in, so this single install covers both:
-
 ```bash
-./venv/Scripts/python.exe -m pip install -r AI/requirements-dev.txt
+./venv/bin/pip install -r AI/requirements-dev.txt
 ```
 
 ```bash
-cd AI && ../venv/Scripts/python.exe -m pytest
+cd AI && ../venv/bin/python -m pytest
 ```
 
 ```bash
 cd Frontend && npm run lint && npm run build
 ```
 
-The Java suite covers upload validation, the cache fingerprint, the HTTP error
-contract, and per-user isolation. The Python suite covers chunking and section
-detection, the provider fallback chain and provider-signalled cooldowns against
-mocked providers, the internal API's token boundary, prompt-injection fencing,
-and the honesty rules. No test makes a real provider call.
+No test makes a real call to a model provider.
 
 ---
 
-## Manual setup
+## Usage
 
-These need credentials only you can create.
+1. **Sign up** with an email and password, or sign in with Google or GitHub.
+2. **Create a project** to group papers around a research topic. Papers can also sit
+   outside any project.
+3. **Upload PDFs** — several at a time. Each file reports its own result, so one bad
+   file does not cancel the rest, and you can watch indexing progress per paper.
+4. **Search** your library by meaning or by keyword.
+5. **Ask questions** about a single paper or a whole project, and follow each claim
+   back to the passage it came from.
+6. **Compare** two or three papers side by side.
+7. **Find research gaps** across a project.
+8. **Check novelty** by describing your idea and testing it against your papers.
+9. **Export** any saved analysis as Markdown, PDF, or BibTeX from the history page.
 
-| What | Where | Needed for |
-|---|---|---|
-| **Neon database** | <https://console.neon.tech> | `DATABASE_URL`. Enable the `vector` extension (the first migration does this). |
-| **Neon Auth** | Neon console, Auth tab | `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL`, `NEON_AUTH_ISSUER`. The issuer is the server **origin**, without the `/<db>/auth` path. |
-| **Sign-in** | Neon Auth, OAuth providers | Email and password work with no setup. Google runs on Neon's shared development credentials; GitHub, and Google in production, need your own OAuth app's client id and secret. |
-| **Backblaze B2** | <https://secure.backblaze.com> | Create a **private** bucket and an application key scoped to it, then set `B2_KEY_ID`, `B2_APPLICATION_KEY`, `B2_BUCKET_NAME`, `B2_ENDPOINT` and `B2_REGION`. The region is the middle segment of the endpoint host, for example `us-west-004` in `s3.us-west-004.backblazeb2.com`. |
-| **LLM provider** | Google AI Studio, Groq, OpenRouter | At least one key. Without one, indexing and search still work; analysis reports that AI is unavailable. |
+### Pages
 
-Nothing else requires manual work. Everything above is read from environment
-variables, and both backends refuse to start if a required one is missing.
-
----
-
-## Architecture notes
-
-Longer reasoning lives in [Docs/Architecture](Docs/Architecture/architecture.md).
-The short version:
-
-**Why two backends.** Spring Boot does what Java is good at: REST, validation,
-transactions, authorization. The PDF and embedding ecosystem is Python-native.
-The boundary is strict: FastAPI holds no business logic, is never called by a
-browser, and performs no authorization of its own.
-
-**Why B2 through the S3 API rather than its native API.** The S3 surface means
-one SDK, presigned URLs, and a provider that can be swapped by changing five
-environment variables. Two settings are not optional against B2 and are set
-explicitly in `StorageConfig`: request checksums are turned down to
-when-required, because the AWS SDK's defaults send headers B2 rejects outright;
-and the region must match the endpoint host, because B2 signs over it.
-
-**Why pgvector, not a vector database.** The corpus is thousands of chunks. Keeping
-vectors in Postgres means owner, project, year and section filters apply in the
-same query as the similarity ordering, instead of a cross-system join in
-application code.
-
-**Why a thread pool, not a queue.** Job state is persisted, so progress survives a
-restart and unfinished jobs are resumed on boot. A broker would add a service to
-run for no benefit at one instance per service. The migration path is to replace
-the executor with a queue consumer and leave the job table alone.
-
-**Why no numeric novelty score.** A percentage would imply a precision the
-retrieved evidence cannot support. The output is structured evidence with a
-confidence band that is capped by corpus size and retrieval strength.
+| Route | Page |
+|---|---|
+| `/login`, `/signup` | Sign in and sign up |
+| `/dashboard` | Overview and quick actions |
+| `/library` | All papers, with filters and tags |
+| `/search` | Semantic and keyword search |
+| `/ask` | Question answering |
+| `/compare` | Paper comparison |
+| `/gaps` | Research gaps |
+| `/novelty` | Novelty check |
+| `/history` | Saved analyses and export |
