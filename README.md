@@ -122,6 +122,14 @@ naming any that are missing rather than starting a database with a blank one.
 cd Backend && mvn test
 ```
 
+The Python suite needs the test-only dependencies. They are kept out of the
+runtime file so the deployed image does not ship a test runner, and the dev
+file pulls the runtime one in, so this single install covers both:
+
+```bash
+./venv/Scripts/python.exe -m pip install -r AI/requirements-dev.txt
+```
+
 ```bash
 cd AI && ../venv/Scripts/python.exe -m pytest
 ```
@@ -132,8 +140,9 @@ cd Frontend && npm run lint && npm run build
 
 The Java suite covers upload validation, the cache fingerprint, the HTTP error
 contract, and per-user isolation. The Python suite covers chunking and section
-detection, the provider fallback chain against mocked providers, prompt-injection
-fencing, and the honesty rules. No test makes a real provider call.
+detection, the provider fallback chain and provider-signalled cooldowns against
+mocked providers, the internal API's token boundary, prompt-injection fencing,
+and the honesty rules. No test makes a real provider call.
 
 ---
 
