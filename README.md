@@ -361,3 +361,20 @@ No test makes a real call to a model provider.
 | `/gaps` | Research gaps |
 | `/novelty` | Novelty check |
 | `/history` | Saved analyses and export |
+
+---
+
+## Credits
+
+Built and maintained by [13SunnySingh12](https://github.com/13SunnySingh12).
+
+Further reading in [`Docs/`](Docs):
+
+| Document | What it covers |
+|---|---|
+| [Architecture](Docs/Architecture/architecture.md) | How the services fit together, the indexing and retrieval pipelines, and the reasoning behind each choice |
+| [API reference](Docs/API/api.md) | Every endpoint, the error contract, and status codes |
+| [Postman collection](Docs/API/rlna.postman_collection.json) | A ready-to-import set of requests for trying the API |
+| [Feature specification](Docs/features.md) | The original specification the project was built against |
+| [Implementation decisions](Docs/Implementation/decisions.md) | Where the build differs from that specification, and why |
+| [Design system](Docs/Design/design-system.md) | Interface principles, layout, typography, and colour |
