@@ -1,0 +1,112 @@
+spring:
+  application:
+    name: rlna-backend
+
+  # Local development reads the repository-root .env directly, so there is one
+  # place to keep configuration instead of a duplicate set of run configs.
+  # In Docker and on Render these come from real environment variables and the
+  # import is simply absent.
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]
+
+  datasource:
+    # spring.datasource.url/username/password are derived from DATABASE_URL by
+    # DatabaseUrlEnvironmentPostProcessor.
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: 1
+      connection-timeout: 30000
+      # Neon suspends idle computes; recycling connections avoids handing a
+      # dead one to a request after a quiet period.
+      max-lifetime: 600000
+      idle-timeout: 300000
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema. Hibernate only validates that it matches.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE_MB:25}MB
+      max-request-size: ${MAX_UPLOAD_REQUEST_SIZE_MB:120}MB
+      file-size-threshold: 1MB
+
+  threads:
+    virtual:
+      enabled: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-stacktrace: never
+    include-message: never
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}
+    com.rlna: ${APP_LOG_LEVEL:info}
+
+rlna:
+  auth:
+    jwks-url: ${NEON_AUTH_JWKS_URL}
+    issuer: ${NEON_AUTH_ISSUER:}
+  storage:
+    bucket: ${B2_BUCKET_NAME:rlna-papers}
+    endpoint: ${B2_ENDPOINT:}
+    # Backblaze B2 signs over the region, so it must match the endpoint host
+    # exactly. There is no valid placeholder value.
+    region: ${B2_REGION:}
+    access-key-id: ${B2_KEY_ID:}
+    secret-access-key: ${B2_APPLICATION_KEY:}
+    signed-url-ttl-seconds: ${B2_SIGNED_URL_TTL_SECONDS:300}
+    # B2 accepts virtual-hosted addressing; only a local S3 stand-in needs paths.
+    force-path-style: ${B2_FORCE_PATH_STYLE:false}
+  ai-service:
+    base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
+    internal-token: ${FASTAPI_INTERNAL_TOKEN}
+    timeout-seconds: ${AI_REQUEST_TIMEOUT_SECONDS:60}
+    # Reuse of a stored analysis when task, model, query and evidence all match.
+    cache-enabled: ${AI_CACHE_ENABLED:true}
+  upload:
+    max-size-mb: ${MAX_UPLOAD_SIZE_MB:25}
+  academic:
+    base-url: ${ACADEMIC_API_BASE_URL:https://api.openalex.org}
+    mailto: ${ACADEMIC_API_MAILTO:}
+    rate-limit-per-minute: ${ACADEMIC_API_RATE_LIMIT_PER_MINUTE:60}
+  allowed-origins: ${FRONTEND_ORIGIN:http://localhost:5173,http://localhost:3000}
+  rate-limit:
+    upload-per-minute: ${RATE_LIMIT_UPLOAD_PER_MINUTE:20}
+    search-per-minute: ${RATE_LIMIT_SEARCH_PER_MINUTE:60}
+    analysis-per-minute: ${RATE_LIMIT_ANALYSIS_PER_MINUTE:20}

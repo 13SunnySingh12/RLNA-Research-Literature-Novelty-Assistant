@@ -1,0 +1,60 @@
+# ---------- Secrets ----------
+# Every .env variant is ignored, with the committed template as the one
+# exception. The previous list named specific files, so a .env.development or
+# .env.staging would have been committed without anyone noticing.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+credentials.json
+service-account*.json
+
+# ---------- Python ----------
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+# Sentence Transformers downloads the embedding model on first run.
+AI/.model-cache/
+.cache/huggingface/
+
+# ---------- Java ----------
+target/
+*.class
+
+# ---------- Node ----------
+node_modules/
+dist/
+.vite/
+coverage/
+*.local
+
+# ---------- Deployment platforms ----------
+.vercel/
+.netlify/
+
+# ---------- Editors / OS ----------
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---------- Runtime and scratch ----------
+logs/
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+Infrastructure/docker/.data/
+# Local database dumps taken while debugging.
+*.sql.gz
+*.dump

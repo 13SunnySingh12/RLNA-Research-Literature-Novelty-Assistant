@@ -1,0 +1,142 @@
+# Full local stack (Section 31.1).
+#
+# Two substitutions are deliberate and local-only:
+#   * Postgres with pgvector stands in for Neon.
+#   * MinIO stands in for Backblaze B2. Both speak the S3 API, so the storage
+#     code path exercised here is byte for byte the one that runs against B2,
+#     and local development needs no cloud credentials.
+#
+# Point DATABASE_URL and the B2_* variables at the real services to run against
+# them instead; nothing in the images changes.
+#
+# The local containers carry no credentials of their own: POSTGRES_PASSWORD,
+# MINIO_ROOT_USER and MINIO_ROOT_PASSWORD have to come from the root .env, which
+# is why the command below passes --env-file. Compose otherwise reads .env from
+# the directory holding this file, and starting a database with a password
+# committed to the repository is not a habit worth having even locally.
+#
+#   docker compose --env-file .env -f Infrastructure/docker/docker-compose.yml up --build
+#
+# Build contexts are the repository root, so run it from there.
+
+name: rlna
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: rlna
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (local containers only)}
+      POSTGRES_DB: rlna
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rlna -d rlna"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env (local containers only)}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env (local containers only)}
+      # B2 verifies the SigV4 region. Pinning it here means a wrong B2_REGION
+      # fails locally too, instead of only in production.
+      MINIO_REGION: ${B2_REGION:-us-east-005}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Creates the bucket once and exits. Without it the first upload fails against
+  # a bucket that does not exist yet. On Backblaze B2 the bucket is created in
+  # the console instead, and must be private.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
+      mc mb --ignore-existing local/$${B2_BUCKET_NAME:-rlna-papers} &&
+      echo 'bucket ready'
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env (local containers only)}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env (local containers only)}
+      B2_BUCKET_NAME: ${B2_BUCKET_NAME:-rlna-papers}
+
+  ai-service:
+    build:
+      context: ../..
+      dockerfile: AI/Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      PORT: 8000
+      DATABASE_URL: ${DATABASE_URL:-postgresql://rlna:${POSTGRES_PASSWORD}@postgres:5432/rlna}
+      B2_ENDPOINT: ${B2_ENDPOINT:-http://minio:9000}
+      B2_REGION: ${B2_REGION:-us-east-005}
+      B2_KEY_ID: ${B2_KEY_ID:-${MINIO_ROOT_USER}}
+      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-${MINIO_ROOT_PASSWORD}}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Backend/Dockerfile
+    env_file:
+      - ../../.env
+    environment:
+      SERVER_PORT: 8080
+      DATABASE_URL: ${DATABASE_URL:-postgresql://rlna:${POSTGRES_PASSWORD}@postgres:5432/rlna}
+      FASTAPI_BASE_URL: http://ai-service:8000
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      B2_ENDPOINT: ${B2_ENDPOINT:-http://minio:9000}
+      B2_REGION: ${B2_REGION:-us-east-005}
+      B2_KEY_ID: ${B2_KEY_ID:-${MINIO_ROOT_USER}}
+      B2_APPLICATION_KEY: ${B2_APPLICATION_KEY:-${MINIO_ROOT_PASSWORD}}
+      # MinIO serves buckets as a path. B2 uses virtual-hosted addressing, so
+      # this stays false against the real service.
+      B2_FORCE_PATH_STYLE: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: Frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+        VITE_NEON_AUTH_BASE_URL: ${VITE_NEON_AUTH_BASE_URL:-}
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  minio-data:

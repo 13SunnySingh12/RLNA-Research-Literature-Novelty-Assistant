@@ -1,0 +1,24 @@
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# --- PDF processing ---
+PyMuPDF==1.25.2
+
+# --- Embeddings (runs locally on CPU; zero cost per call, Section 19.1) ---
+sentence-transformers==3.3.1
+torch==2.6.0
+
+# --- Database (pgvector over psycopg 3) ---
+psycopg[binary,pool]==3.2.3
+pgvector==0.3.6
+
+# --- Object storage (Backblaze B2 over its S3-compatible API) ---
+# 1.36+ is required: the checksum controls B2 needs (see integrations/storage.py)
+# do not exist in earlier botocore releases.
+boto3==1.40.47
+
+# --- Outbound HTTP to LLM providers ---
+httpx==0.28.1

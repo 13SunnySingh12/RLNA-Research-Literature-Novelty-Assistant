@@ -1,0 +1,11 @@
+# Test-only dependencies.
+#
+# Kept out of requirements.txt so the runtime image does not ship a test
+# runner: it is dead weight in production and its advisories would apply to
+# the deployed artefact for no reason. Install both files for local work:
+#   pip install -r AI/requirements.txt -r AI/requirements-dev.txt
+-r requirements.txt
+
+pytest==8.3.4
+pytest-asyncio==0.25.2
+respx==0.22.0

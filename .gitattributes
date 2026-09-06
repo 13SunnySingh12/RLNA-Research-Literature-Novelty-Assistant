@@ -1,0 +1,14 @@
+# Normalize line endings so a Windows checkout and a Linux CI runner agree.
+* text=auto eol=lf
+
+# Scripts that must keep LF to be executable in a container.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.sql text eol=lf
+
+# Binary assets must never be touched.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
